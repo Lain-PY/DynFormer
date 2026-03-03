@@ -21,7 +21,7 @@
 ## 📁 Project Structure
 
 ```
-DynFormer-private/
+DynFormer/
 ├── README.md                    # This file
 ├── environment-minimal.yml      # Conda environment specification
 ├── LICENSE                      # MIT License
@@ -52,24 +52,16 @@ DynFormer-private/
     │   ├── GNOT.py              # General Neural Operator Transformer
     │   ├── OFormer.py           # OFormer baseline
     │   ├── ONO.py               # Orthogonal Neural Operator
-    │   ├── Transolver.py        # Transolver baseline
-    │   └── T-DyMixOp.py         # T-DyMixOp variant
+    │   └── Transolver.py        # Transolver baseline
     │
     ├── Configs/                 # Configuration files organized by model
     │   ├── DynFormer/           # DynFormer configs
-    │   │   ├── Base/            #   Base configs (1dKS, 2dDarcy, 2dNS, 3dSW)
-    │   │   ├── Ablation/        #   Ablation study configs
-    │   │   └── Variant/         #   Variant configs
-    │   ├── FactFormer/          # FactFormer configs (Base, Ablation, Variant)
+    │   │   └── Base/            #   Base configs (1dKS, 2dDarcy, 2dNS, 3dSW)
+    │   ├── FactFormer/          # FactFormer configs
     │   ├── GNOT/                # GNOT configs
     │   ├── OFormer/             # OFormer configs
     │   ├── ONO/                 # ONO configs
     │   └── Transolver/          # Transolver configs
-    │
-    ├── Scripts/                 # Automation and analysis scripts
-    │   ├── Base/                #   Batch training, inference, analysis, visualization
-    │   ├── Variants/            #   Variant config generation
-    │   └── Ablation/            #   Ablation config generation
     │
     ├── DataGeneration/          # Dataset generation scripts
     │   ├── 1dKS_generation.m         # 1D Kuramoto-Sivashinsky (MATLAB)
@@ -80,8 +72,7 @@ DynFormer-private/
     │   └── 3dsw_dataprocess.py       # 3D Shallow Water data processing
     │
     ├── Datasets/                # Dataset directory (not tracked)
-    ├── Results/                 # Training results and checkpoints
-    └── Analyses/                # Generated LaTeX tables and analysis outputs
+    └── Results/                 # Training results and checkpoints
 ```
 
 ## 🚀 Installation
@@ -90,8 +81,8 @@ DynFormer-private/
 
 ```bash
 # Clone the repository
-git clone https://github.com/Lain-PY/DynFormer-private.git
-cd DynFormer-private
+git clone https://github.com/Lain-PY/DynFormer.git
+cd DynFormer
 
 # Create conda environment
 conda env create -f environment-minimal.yml
@@ -121,28 +112,6 @@ python main.py --config Configs/DynFormer/Base/config_2dns_DynFormer.json
 
 # Visualization (set "visualize": true)
 python main.py --config Configs/DynFormer/Base/config_2dns_DynFormer.json
-```
-
-### Batch Training & Analysis
-
-The `Scripts/` directory provides automation scripts for running experiments at scale:
-
-```bash
-# Batch training across all models and datasets
-python -m Scripts.Base.run_batch_train
-
-# Run inference on trained models
-python -m Scripts.Base.run_inference
-
-# Generate analysis tables and statistics
-python -m Scripts.Base.run_analysis
-python -m Scripts.Base.run_statistics
-
-# Generate comparison visualizations
-python -m Scripts.Base.run_visualization
-
-# Run scaled (super-resolution) inference
-python -m Scripts.Base.run_scaled_inference
 ```
 
 ### Configuration
