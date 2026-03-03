@@ -1,0 +1,82 @@
+{
+  "device": "cuda:0",
+  "verbose": 1,
+  "data": {
+    "dataset_path": "./Datasets/2dNS_1200x20x1x64x64_dt1_t[10_30]_nu1e-05.mat",
+    "dataset_name": "2dNS",
+    "input_key": "ws",
+    "output_key": "ws",
+    "data_space_dim": 2,
+    "ntrain": 1000,
+    "ntest": 200,
+    "time_start_idx": 0,
+    "input_dim": 1,
+    "inp_involve_history_step": 9,
+    "output_dim": 1,
+    "ar_nseq_train": 10,
+    "ar_nseq_test": 0,
+    "res_x": 64,
+    "res_y": 64,
+    "res_z": 1,
+    "res_step": 1,
+    "norm_kind": "min-max",
+    "noise_level_ic": 0.0,
+    "noise_level_label": 0.0,
+    "pre_shuffle": false,
+    "static_data_keys": [],
+    "static_data_generators": [
+      "utils.generate_coor_input"
+    ]
+  },
+  "model": {
+    "model_name": "OFormer",
+    "model_path": "./Models/OFormer.py",
+    "input_dim": 1,
+    "inp_involve_history_step": 9,
+    "ar_nseq_train": 10,
+    "out_steps": 1,
+    "ar_nseq_test": 0,
+    "coor_input_dim": 2,
+    "output_dim": 1,
+    "hidden_dim": 128,
+    "n_head": 8,
+    "num_layers": 8,
+    "scale": 8,
+    "dropout": 0
+  },
+  "training": {
+    "train": true,
+    "inference": true,
+    "visualize": false,
+    "num_epochs": 500,
+    "batch_size": 64,
+    "lr": 0.001,
+    "step_size": 7,
+    "restart_checkpoint_path": null,
+    "save_checkpoint_dir_name": "checkpoints",
+    "infer_checkpoint_path": "best_checkpoint_on_test_dataset.pth",
+    "save_info_dir_name": "Results",
+    "save_best_checkpoint_on_val_dataset": false,
+    "save_best_checkpoint_on_test_dataset": true,
+    "save_checkpoints_at_end": true,
+    "save_checkpoints_ep": 0,
+    "random_seed": 12,
+    "variant_id": "default",
+    "max_grad_norm": null
+  },
+  "visualization": {
+    "visual_models": [
+      "OFormer"
+    ],
+    "visual_compare_dir_name": "Visualizations",
+    "sample_idx": 0,
+    "time_idx": -1,
+    "channel_idx": 0
+  },
+  "loss": {
+    "reccons_type": "relative_mse",
+    "consist_type": "relative_mse",
+    "weight_reccons": 1.0,
+    "weight_consist": 0.0
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "device": "cuda:0",
+  "verbose": 1,
+  "data": {
+    "dataset_path": "./Datasets/1dKS_1200x22x1x4096x1_dt1_t[100_120].mat",
+    "dataset_name": "1dKS",
+    "input_key": "uu",
+    "output_key": "uu",
+    "data_space_dim": 2,
+    "ntrain": 1000,
+    "ntest": 200,
+    "time_start_idx": 1,
+    "input_dim": 1,
+    "inp_involve_history_step": 9,
+    "output_dim": 1,
+    "ar_nseq_train": 10,
+    "ar_nseq_test": 0,
+    "res_x": 4096,
+    "res_y": 1,
+    "res_z": 1,
+    "res_step": 16,
+    "norm_kind": "min-max",
+    "noise_level_ic": 0.0,
+    "noise_level_label": 0.0,
+    "pre_shuffle": false,
+    "static_data_keys": [],
+    "static_data_generators": [
+      "utils.generate_coor_input"
+    ]
+  },
+  "model": {
+    "model_name": "DynFormer",
+    "model_path": "./Models/DynFormer.py",
+    "input_dim": 1,
+    "inp_involve_history_step": 9,
+    "ar_nseq_train": 10,
+    "ar_nseq_test": 0,
+    "coor_input_dim": 2,
+    "output_dim": 1,
+    "hidden_dim": 32,
+    "num_layers": 6,
+    "num_nonlinear": 1,
+    "num_linear": 1,
+    "evo_step_c_in_hierachy": 1,
+    "global_kernel": "KSAttention",
+    "spectral_modes": [
+      64,
+      1
+    ],
+    "n_head": 8,
+    "local_kernel": "mlp",
+    "kernel_size": 1,
+    "out_steps": 1
+  },
+  "training": {
+    "train": true,
+    "inference": true,
+    "visualize": false,
+    "num_epochs": 500,
+    "batch_size": 64,
+    "lr": 0.001,
+    "step_size": 7,
+    "restart_checkpoint_path": null,
+    "save_checkpoint_dir_name": "checkpoints",
+    "infer_checkpoint_path": "best_checkpoint_on_test_dataset.pth",
+    "save_info_dir_name": "Results",
+    "save_best_checkpoint_on_val_dataset": false,
+    "save_best_checkpoint_on_test_dataset": true,
+    "save_checkpoints_at_end": true,
+    "save_checkpoints_ep": 0,
+    "random_seed": 123,
+    "variant_id": "default",
+    "max_grad_norm": null
+  },
+  "visualization": {
+    "visual_models": [
+      "DynFormer"
+    ],
+    "visual_compare_dir_name": "Visualizations",
+    "sample_idx": 0,
+    "time_idx": -1,
+    "channel_idx": 0
+  },
+  "loss": {
+    "reccons_type": "relative_mse",
+    "consist_type": "relative_mse",
+    "weight_reccons": 1.0,
+    "weight_consist": 0.0
+  }
+}

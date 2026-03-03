@@ -1,0 +1,734 @@
+
+\documentclass[final,3p,times]{elsarticle}
+\usepackage{graphicx}
+\usepackage[caption=false]{subfig}
+\usepackage{amsmath,bm}
+\usepackage{amsthm,amsmath,amssymb} \usepackage{mathrsfs}
+\usepackage{url}
+\usepackage{lineno}
+\usepackage{color}
+\usepackage{algorithmic}
+\usepackage{algorithm}
+\usepackage{diagbox}
+\usepackage{makecell}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage[figuresright]{rotating}
+\usepackage[normalem]{ulem} % For underlining
+\usepackage{siunitx} % For decimal alignment
+\usepackage{xcolor}
+\usepackage{colortbl} % Required for row coloring
+\usepackage{hyperref}
+
+% --- Custom Definitions ---
+% Define the specific blue requested
+\definecolor{bestblue}{RGB}{0, 119, 187}
+\definecolor{rowgray}{gray}{0.92} % Light gray for your method
+\definecolor{impgreen}{RGB}{0, 150, 0} % Green for improvement text
+
+% Semantic commands for ranking
+% We use \tablenum to ensure siunitx formats the number correctly even inside bold/color
+\newcommand{\best}[1]{\textbf{\tablenum[table-format=1.2e-1]{#1}}}
+\newcommand{\second}[1]{\color{bestblue}\bfseries\tablenum[table-format=1.2e-1]{#1}}
+\newcommand{\third}[1]{\uline{\tablenum[table-format=1.2e-1]{#1}}}
+
+% Helper for the improvement row
+% Usage: \imp{percentage}
+\newcommand{\imp}[1]{\multicolumn{1}{c}{\cellcolor{impgreen!10}\bfseries\color{impgreen!80!black}$\uparrow$#1\%}}
+\newcommand{\noimp}{\multicolumn{1}{c}{-}}
+% Helper for the improvement label cell
+\newcommand{\implabel}{\multicolumn{2}{l}{\cellcolor{impgreen!10}\textit{\textbf{Improvement}}}}
+% Command for N/A entries to center them properly
+\newcommand{\na}{\multicolumn{1}{c}{--}}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}%
+%%\newtheorem{proposition}{Proposition}%
+\newtheorem{example}{Example}%
+\newtheorem{remark}{Remark}%
+\newtheorem{definition}{Definition}%
+\newtheorem{corollary}{Corollary}
+
+% \topmargin 0.0cm
+% \oddsidemargin 0.2cm
+% \textwidth 16cm
+% \textheight 21cm
+% \footskip 1.0cm
+
+%The next command sets up an environment for the abstract to your paper.
+
+% \newenvironment{sciabstract}{%
+% \begin{quote} \bf}
+% {\end{quote}}
+
+% \providecommand{\keywords}[1]{\textbf{\textit{keywords:}} #1}
+
+\journal{}
+
+\begin{document}
+% Double-space the manuscript.
+
+\begin{frontmatter}
+
+\title{From Complex Dynamics to DynFormer: Rethinking Transformers for PDEs}
+
+\author[aff1]{Pengyu Lai}
+\author[aff1]{Yixiao Chen}
+\author[aff1]{Dewu Yang}
+\author[aff1]{Rui Wang}
+\author[aff1]{Feng Wang}
+\author[aff1]{Hui Xu\corref{cor1}}
+
+\cortext[cor1]{Corresponding author: dr.hxu@sjtu.edu.cn}
+
+\affiliation[aff1]{%
+organization={School of Aeronautics and Astronautics, Shanghai Jiao Tong University},
+% addressline={},
+city={Shanghai},
+postcode={200240},
+country={China}
+}
+
+\begin{abstract}
+Partial differential equations (PDEs) are fundamental for modeling complex physical systems, yet classical numerical solvers face prohibitive computational costs in high-dimensional and multi-scale regimes. 
+While Transformer-based neural operators have emerged as powerful data-driven alternatives, they conventionally treat all discretized spatial points as uniform, independent tokens. This monolithic approach ignores the intrinsic scale separation of physical fields, applying computationally prohibitive $\mathcal{O}(N^4)$ global attention that redundantly mixes smooth large-scale dynamics with high-frequency fluctuations. Rethinking Transformers through the lens of complex dynamics, we propose DynFormer, a novel dynamics-informed neural operator. Rather than applying a uniform attention mechanism across all scales, DynFormer explicitly assigns specialized network modules to distinct physical scales. It leverages a Spectral Embedding to isolate low-frequency modes, enabling a Kronecker-structured attention mechanism to efficiently capture large-scale global interactions with reduced $\mathcal{O}(N^3)$ complexity. Concurrently, guided by the slaving principle of complex dynamics, we introduce a Local-Global-Mixing (LGM) transformation. This module utilizes nonlinear multiplicative frequency mixing to implicitly reconstruct the small-scale, fast-varying turbulent cascades that are slaved to the macroscopic state, without incurring the cost of global attention.
+Integrating these modules into a hybrid evolutionary architecture ensures robust long-term temporal stability. Extensive memory-aligned evaluations across chaotic, elliptic, parabolic, and hyperbolic PDE benchmarks demonstrate that DynFormer achieves up to a 95\% reduction in relative error compared to state-of-the-art baselines, while significantly reducing GPU memory consumption. Our results establish that embedding first-principles physical dynamics into Transformer architectures yields a highly scalable, theoretically grounded blueprint for PDE surrogate modeling.
+\end{abstract}
+
+  \begin{keyword}
+    Complex Systems \sep Neural Operator \sep Nonlinear Dynamics \sep PDE Solving \sep Inertial Manifold
+  \end{keyword}
+
+\end{frontmatter}
+
+
+\section{Introduction}
+% Importance of PDEs
+PDEs play a fundamental role in modeling a wide range of natural and engineered phenomena \cite{evans2022partial, farlow1993partial}, including fluid dynamics\cite{landau1987fluid}, heat transfer \cite{pletcher2012computational}, electromagnetism \cite{griffiths2023introduction}, and quantum mechanics \cite{griffiths2023introduction}. Solving PDEs is essential for understanding the underlying physical laws and for predicting the behavior of complex systems under various conditions. Analytical solutions, when available, provide exact descriptions of system dynamics; however, most real-world problems involve nonlinearities, irregular domains, or intricate boundary conditions that preclude closed-form solutions. Consequently, numerical and computational methods for solving PDEs have become indispensable across science and engineering. 
+
+% Classical numerical techniques & their limitations; motivation for ML 
+While classical discretization-based techniques such as finite difference \cite{smith1985numerical}, finite element \cite{zienkiewicz1971finite}, and finite volume \cite{versteeg2007introduction} methods—has achieved remarkable success, they face inherent challenges in high-dimensional, strongly nonlinear, and multi-scale regimes. Grid resolution requirements rise sharply when capturing localized features, discontinuities, or thin boundary layers, driving up both memory footprint and wall-clock cost. The resulting computational burden is exacerbated in parametric, inverse, or design-loop settings where repeated solves are required. These limitations have spurred intense interest in data-driven surrogates for PDEs.
+
+Data-driven neural approximators provide one such alternative. A broad range of architectures have been explored, including fully connected neural networks (FCNNs) \cite{psichogios1992hybrid}, long short-term memory networks (LSTMs) \cite{xuan2023reconstruction}, generative adversarial networks \cite{kim2024prediction} and autoencoder \cite{shi2015convolutional}. To incorporate the prior physical knowledge to facilitate the training and generalization, physics-informed neural networks (PINNs) were proposed, leveraging automatic differentiation to efficiently compute derivatives and enforce PDE constraints \cite{raissi2019physics, pang2019fpinns, lu2021physics}. 
+By combining the expressiveness of deep learning with physical priors, these approaches offer flexibility, improved data efficiency, and in some cases real-time inference, making them an attractive complement or even replacement for classical numerical solvers in many complex scenarios \cite{cho2023separable, raissi2018hidden}.
+
+% Neural operators: operator-learning view & application landscape 
+Despite their promise, many classical neural formulations remain problem-specific, demanding re-implementation when dealing with adjustable parameters, irregular geometries or evolving domains. These limitations motivated the presence of the neural operator approximating the operator mapping between function spaces \cite{kovachki2023neural, lu2021learning}. Neural operator families now underpin a growing range of applications including weather forecasting
+ \cite{bonev2023spherical, lam2023learning, kontolati2024learning, bonev2025fourcastnet}, seismology \cite{sun2023phase, shi2024broadband, haghighat2024deeponet},  turbomachinery \cite{li2025attention} and addictive manufacturing \cite{liu2024deep}. Methodological advances continue to broaden capability: contrastive learning for PDE generalization \cite{zhang2024deciphering, jiang2023training} ; transfer learning for heterogeneous task adaptation \cite{goswami2022deep, lyu2023multi}; in-context learning for out-of-distribution generalization \cite{yang2023context}; prior physics knowledge incorporation for network architectures \cite{long2018pde, long2019pde} and loss functions \cite{jiang2023training, li2024physics}; operator learning on manifolds and curved geometries \cite{seidman2022nomad, bonev2023spherical, li2023fourier}; and generalized spectral kernels beyond Fourier bases \cite{cao2024laplace, gupta2021multiwavelet, tripura2023wavelet, li2020neural}. 
+
+% Broadening backbones: U-Net, large-kernel conv, GNN, Transformer 
+Given the effectiveness of neural operators, researchers have explored diverse architectural backbones within the operator-learning paradigm, including U-Net architecture \cite{wen2022u}, large-kernel convolutional designs \cite{raonic2023convolutional}, graph-based PDE formers for unstructured meshes \cite{ye2024pdeformer}, and attention/transformer-based models \cite{cao2021choose, ye2024pdeformer}. Especially, transformers are particularly appealing, because their global receptive field and flexible tokenization align naturally with discretized function evaluations. Their success in sequence modeling and large language models has catalyzed rapid cross-fertilization with scientific machine learning. The Operator Transformer (OFormer) employs stacked self- and cross-attention blocks \cite{li2022transformer}. The General Neural Operator Transformer (GNOT) extends this idea with heterogeneous normalized attention and geometric gating \cite{hao2023gnot}. Vision-inspired hybrids also appear: the Vision Transformer-Operator (ViTO) embeds a ViT module within a U-Net \cite{ovadia2024vito}, while the Continuous Vision Transformer Operator (CViT) adapts ViT-style encoders with grid-aware positional embeddings and query-wise cross-attention \cite{dosovitskiy2020image}. 
+In parallel, large pretrained operator models for PDEs are emerging \cite{chen2024data, subramanian2023towards, mccabe2024multiple, herde2024poseidon}, further amplifying the need for scalable and efficient transformer backbones that can serve as shared surrogates across tasks, resolutions, and physical regimes.
+
+% Challenges: complexity, memory, need for efficiency -> low-rank remedies 
+Despite this progress, transformer-based neural operators face practical barriers. This monolithic, "one-size-fits-all" attention mechanism ignores the inherent geometric and physical priors of PDE systems, indiscriminately mixing smooth large-scale flows with highly oscillatory small-scale turbulence,
+incurring quadratic space–time complexity in the number of tokens and driving GPU memory usage to prohibitive levels on fine grids of dynamics. Even approximate or nominally linear-complexity attention variants can become numerically fragile or computationally heavy at high resolution. Consequently, efficiency has become a central research theme. Representative efforts include axial factorization of attention along coordinate directions in the Factorized Transformer (FactFormer) \cite{li2023scalable}; orthogonality-regularized attention pathways in the Orthogonal Neural Operator (ONO) \cite{xiao2023improved}; and low-rank physics-aware tokenization in the fast transformer solver (Transolver) \cite{wu2024transolver}. 
+
+% Complex dynamics motivation -> DynFormer idea
+To break this computational and conceptual bottleneck, we draw inspiration from the hierarchical energy cascades and the slaving principle inherent in complex dynamical systems. Many high-dimensional physical systems exhibit scale-dependent coupling between large- and small-scale features \cite{kraichnan1965inertial}. Large-scale components are often smoother and lower-dimensional, whereas small-scale fluctuations can be intermittent yet strongly slaved to the coarse state in certain regimes \cite{carr2012applications}. This suggests that if a model can efficiently capture correlations in the large-scale dynamics, it may be possible to reconstruct, or at least approximate, relevant small-scale behavior from that coarse representation. Such ideas underpin long traditions in turbulence modeling and reduced-order modeling of multi-scale systems. They also resonate with emerging evidence in operator learning that fine-scale structure can, in part, be inferred from coarsened inputs \cite{lai2024neural}.
+
+Guided by this physical insight, we propose DynFormer, which fundamentally rethinks the Transformer for PDEs. Rather than forcing a single attention mechanism to process all scales, DynFormer follows a simple but powerful philosophy: the neural architecture should mirror how nature evolves. We explicitly abandon uniform tokenization and establish a framework where network modules are strictly bound to physical scales.
+Our main contributions are summarized as follows:
+\begin{itemize}
+    \item \textbf{Rethinking Transformers via the Slaving Principle.} We expose the inefficiency of treating physical fields as uniform tokens. By bridging neural architecture with the slaving principle of complex dynamics, we establish a novel framework that fundamentally shifts from monolithic attention to a scale-specialized processing paradigm.
+    \item \textbf{Large-Scale Dynamics via Spectral Separation and Kronecker Attention} We design a spectral embedding mechanism to truncate high frequencies and explicitly isolate the large-scale, low-frequency modes. On this highly predictable latent manifold, we propose a Kronecker-structured attention mechanism that leverages axis-wise factorization, drastically reducing spatial complexity from $\mathcal{O}(N^4)$ to $\mathcal{O}(N^3)$ while preserving long-range physical coupling.
+    \item \textbf{Small-Scale Reconstruction via LGM.} Because small-scale dynamics are slaved to macroscopic states, we bypass expensive full-grid attention for high frequencies. Instead, we introduce the LGM transformation, which uses multiplicative frequency mixing—analogous to nonlinear convective transport—to implicitly reconstruct the sub-grid turbulent cascades discarded during initial spectral truncation.
+    \item \textbf{Comprehensive Evaluation on Multi-Scale PDE Benchmarks.} Through extensive experiments on challenging 1D to 3D multi-scale PDE systems, DynFormer achieves state-of-the-art predictive accuracy while operating at a fraction of the GPU memory footprint of existing transformer-based operators.
+\end{itemize}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{Figure_1.pdf}
+  \caption{Overview of DynFormer's performance across four PDE benchmarks and baselines' peak GPU memory consumption.}
+  \label{fig:radar_overview}
+\end{figure}
+
+
+
+\section{Methodology}\label{Methodology}
+% \subsection{Operator definition}. 
+% In this work, we focus on the form of neural operators due to their mesh independence and generalization to unseen parameters. Here, we first outline the concept of operator approximation.
+% Given a spatial domain \( D \subset \mathbb{R}^d \) with a spatial dimension \( d \), an operator mapping from the input space to the solution space is defined as:
+% \begin{equation}
+%     \mathcal{G}: \mathcal{I}(D; \mathbb{R}^{d_i}) \rightarrow \mathcal{U}(D; \mathbb{R}^{d_u}),
+% \end{equation}
+% where \( \mathcal{I}(D; \mathbb{R}^{d_i}) \) and \( \mathcal{U}(D; \mathbb{R}^{d_u}) \) are Banach spaces representing the input and solution spaces, respectively, and \( d_i, d_u \in \mathbb{N} \) denote their corresponding dimensions. Specifically, it often involves the evolution of the system in the context of PDEs and thus considers $\mathcal{G}$ an evolutionary operator.
+
+% \subsection{Scale Decomposition of Complex Dynamics}\label{sec:scale_decomposition}
+% To effectively capture the multiscale structure inherent in complex physical systems, we begin with a formal decomposition of the dynamics into large-scale and small-scale components. This decomposition provides the theoretical foundation for our architecture design, enabling separate treatment of global correlations and local nonlinear interactions.
+
+% \paragraph{Large-Scale and Small-Scale Dynamics}
+% Consider a general nonlinear dynamical system governed by the evolution equation:
+% \begin{equation}
+% \frac{\partial u(t)}{\partial t} = \mathscr{A}u(t) + f,
+% \label{eq:general_dynamics}
+% \end{equation}
+% where $u(t) \in \mathscr{X}$ represents the system state at time $t$, $\mathscr{A} = \mathscr{L} + \mathscr{N}$ denotes a composite differential operator composed of linear ($\mathscr{L}$) and nonlinear ($\mathscr{N}$) components, and $f$ is an external forcing term. The solution space $\mathscr{X}$ is assumed to be a Hilbert space equipped with an appropriate inner product structure.
+
+% Following the nonlinear Galerkin methodology \cite{foias1988inertial, marion1989nonlinear}, we introduce a functional space decomposition $\mathscr{X} = \mathscr{X}^M \oplus \mathscr{X}^{M^\perp}$, where $\mathscr{X}^M$ represents an $M$-dimensional coarse-scale subspace and $\mathscr{X}^{M^\perp}$ denotes its orthogonal fine-scale complement. Let $\mathscr{P}_M: \mathscr{X} \rightarrow \mathscr{X}^M$ and $\mathscr{Q}_M: \mathscr{X} \rightarrow \mathscr{X}^{M^\perp}$ be the corresponding projection operators satisfying $\mathscr{P}_M + \mathscr{Q}_M = \mathcal{I}$ and $\mathscr{P}_M \mathscr{Q}_M = \mathscr{Q}_M \mathscr{P}_M = 0$. The system dynamics can then be decomposed as:
+% \begin{subequations}
+% \label{eq:decomposed_dynamics}
+% \begin{align}
+% \frac{\partial p_m(t)}{\partial t} &= \mathscr{L}p_m(t) + \mathscr{P}_M\mathscr{N}\big(p_m(t) + q_m(t)\big) + \mathscr{P}_M f, \label{eq:large_scale} \\
+% \frac{\partial q_m(t)}{\partial t} &= \mathscr{L}q_m(t) + \mathscr{Q}_M\mathscr{N}\big(p_m(t) + q_m(t)\big) + \mathscr{Q}_M f, \label{eq:small_scale}
+% \end{align}
+% \end{subequations}
+% where $p_m(t) = \mathscr{P}_M u(t) \in \mathscr{X}^M$ and $q_m(t) = \mathscr{Q}_M u(t) \in \mathscr{X}^{M^\perp}$ represent the large-scale and small-scale components, respectively.
+
+% \paragraph{Mapping from Large- to Small-Scale Dynamics}
+% This decomposition aligns with the perspective from renormalization group theory \cite{chen1994}, where $p_m(t)$ and $q_m(t)$ correspond to slow and fast modes, respectively. Due to the fast-relaxation nature of small-scale dynamics and the typically smaller magnitude of $q_m$ compared to $p_m$, we can neglect higher-order nonlinearities involving $q_m$ under the quasi-steady-state assumption. Equation \eqref{eq:small_scale} then reduces to:
+% \begin{equation}
+% \mathscr{L}q_m(t) + \mathscr{Q}_M \mathscr{N}p_m(t) + \mathscr{Q}_M f \approx 0,
+% \label{eq:quasi_steady}
+% \end{equation}
+% yielding an approximate mapping:
+% \begin{equation}
+% q_m(t) \approx \mathscr{L}^{-1}\Big(-\mathscr{Q}_M \mathscr{N}p_m(t) - \mathscr{Q}_M f\Big).
+% \label{eq:small_scale_mapping}
+% \end{equation}
+% This approximation implies the existence of a graph mapping $\Phi: \mathscr{X}^M \rightarrow \mathscr{X}^{M^\perp}$ such that $q_m(t) = \Phi\big(p_m(t)\big)$. This theoretical insight underpins our operator architecture design, where small-scale dynamics are implicitly reconstructed from the large-scale representation through learned nonlinear transformations.
+
+% \paragraph{Scale Decomposition via Fourier Modes}
+% To realize the decomposition in practice, we adopt Fourier decomposition, which offers both computational efficiency (via FFT with $\mathcal{O}(N \log N)$ complexity) and physical interpretability. Given a discretized field $u \in \mathbb{R}^{N_1 \times N_2 \times \cdots \times N_d \times d_{\text{in}}}$ over a $d$-dimensional spatial domain, each spatial point $u_{\mathbf{i}}$ (where $\mathbf{i} = (i_1, i_2, \ldots, i_d)$) can be projected onto a finite-dimensional Fourier space:
+% \begin{equation}
+% u_{\mathbf{i}} = \sum_{\|\mathbf{k}\| \leq N_{\max}} \hat{u}_{\mathbf{i},\mathbf{k}} \exp\left(\imath \frac{2\pi \mathbf{k} \cdot \mathbf{i}}{N}\right),
+% \label{eq:fourier_expansion}
+% \end{equation}
+% where $\mathbf{k} = (k_1, k_2, \ldots, k_d)$ denotes the frequency index, $N = (N_1, N_2, \ldots, N_d)$ represents the grid resolution, and $\hat{u}_{\mathbf{i},\mathbf{k}}$ are the Fourier coefficients.
+
+% The corresponding projections onto large-scale and small-scale subspaces are defined as:
+% \begin{align}
+% {p_m}_{\mathbf{i}} &= \mathcal{F}^{-1}\big[\mathscr{P}_M \mathcal{F}(u_{\mathbf{i}})\big] = \sum_{\|\mathbf{k}\| \leq M} \hat{u}_{\mathbf{i},\mathbf{k}} \exp\left(\imath \frac{2\pi \mathbf{k} \cdot \mathbf{i}}{N}\right) \in \mathscr{X}^{M}, \label{eq:large_scale_projection} \\
+% {q_m}_{\mathbf{i}} &= \mathcal{F}^{-1}\big[\mathscr{Q}_M \mathcal{F}(u_{\mathbf{i}})\big] = \sum_{M < \|\mathbf{k}\| \leq N_{\max}} \hat{u}_{\mathbf{i},\mathbf{k}} \exp\left(\imath \frac{2\pi \mathbf{k} \cdot \mathbf{i}}{N}\right) \in \mathscr{X}^{M^\perp}, \label{eq:small_scale_projection}
+% \end{align}
+% where $\mathcal{F}$ and $\mathcal{F}^{-1}$ denote the forward and inverse Fourier transforms, respectively. The truncation operator $\mathscr{P}_M$ retains only the lowest $M$ Fourier modes (low-frequency components), while $\mathscr{Q}_M = \mathcal{I} - \mathscr{P}_M$ captures the remaining high-frequency residuals. Consequently, the solution $u$ is decomposed as $u = p_m + q_m$, where $p_m$ preserves the essential long-range features of the system while $q_m$ contains the fine-scale details requiring nonlinear reconstruction.
+
+% This spectral decomposition naturally aligns with the energy cascade structure observed in turbulent systems \cite{kraichnan1965inertial}, where large-scale components are typically smoother and lower-dimensional, whereas small-scale fluctuations exhibit intermittent yet strongly slaved behavior to the coarse state in certain regimes.
+
+
+
+\subsection{Scale Decomposition of Complex Dynamics}\label{sec:scale_decomposition}
+Unlike standard vision or language transformers that process all spatial tokens as uniform, independent entities, physical fields governed by PDEs exhibit distinct, hierarchically structured multiscale behaviors. To effectively capture this and "rethink" the transformer for physical systems, we begin with a formal decomposition of the dynamics into large-scale and small-scale components. This physically grounded decomposition provides the theoretical foundation for our architecture, allowing us to assign global attention mechanisms strictly to large-scale correlations while handling local nonlinear interactions separately.
+
+\paragraph{Large-Scale and Small-Scale Dynamics}
+Consider a general nonlinear dynamical system governed by the evolution equation:
+\begin{equation}
+\frac{\partial u(t)}{\partial t} = \mathscr{A}u(t) + f,
+\label{eq:general_dynamics}
+\end{equation}
+where $u(t) \in \mathscr{X}$ represents the system state at time $t$, $\mathscr{A} = \mathscr{L} + \mathscr{N}$ denotes a composite differential operator composed of linear ($\mathscr{L}$) and nonlinear ($\mathscr{N}$) components, and $f$ is an external forcing term. The solution space $\mathscr{X}$ is assumed to be a Hilbert space equipped with an appropriate inner product structure.
+
+Following the nonlinear Galerkin methodology \cite{foias1988inertial, marion1989nonlinear}, we introduce a functional space decomposition $\mathscr{X} = \mathscr{X}^M \oplus \mathscr{X}^{M^\perp}$, where $\mathscr{X}^M$ represents an $M$-dimensional coarse-scale subspace and $\mathscr{X}^{M^\perp}$ denotes its orthogonal fine-scale complement. Let $\mathscr{P}_M: \mathscr{X} \rightarrow \mathscr{X}^M$ and $\mathscr{Q}_M: \mathscr{X} \rightarrow \mathscr{X}^{M^\perp}$ be the corresponding projection operators satisfying $\mathscr{P}_M + \mathscr{Q}_M = \mathcal{I}$ and $\mathscr{P}_M \mathscr{Q}_M = \mathscr{Q}_M \mathscr{P}_M = 0$. The system dynamics can then be decomposed as:
+\begin{subequations}
+\label{eq:decomposed_dynamics}
+\begin{align}
+\frac{\partial p_m(t)}{\partial t} &= \mathscr{L}p_m(t) + \mathscr{P}_M\mathscr{N}\big(p_m(t) + q_m(t)\big) + \mathscr{P}_M f, \label{eq:large_scale} \\
+\frac{\partial q_m(t)}{\partial t} &= \mathscr{L}q_m(t) + \mathscr{Q}_M\mathscr{N}\big(p_m(t) + q_m(t)\big) + \mathscr{Q}_M f, \label{eq:small_scale}
+\end{align}
+\end{subequations}
+where $p_m(t) = \mathscr{P}_M u(t) \in \mathscr{X}^M$ and $q_m(t) = \mathscr{Q}_M u(t) \in \mathscr{X}^{M^\perp}$ represent the large-scale and small-scale components, respectively.
+
+\paragraph{Mapping from Large- to Small-Scale Dynamics}
+This decomposition mathematically aligns with the energy cascade observed in complex dynamics and renormalization group theory \cite{chen1994}, where $p_m(t)$ and $q_m(t)$ correspond to slow carriers and fast fluctuations, respectively. Due to the fast-relaxation nature of small-scale dynamics and the typically smaller magnitude of $q_m$ compared to $p_m$, we can neglect higher-order nonlinearities involving $q_m$ under the quasi-steady-state assumption. Equation \eqref{eq:small_scale} then reduces to:
+\begin{equation}
+\mathscr{L}q_m(t) + \mathscr{Q}_M \mathscr{N}p_m(t) + \mathscr{Q}_M f \approx 0,
+\label{eq:quasi_steady}
+\end{equation}
+yielding an approximate mapping:
+\begin{equation}
+q_m(t) \approx \mathscr{L}^{-1}\Big(-\mathscr{Q}_M \mathscr{N}p_m(t) - \mathscr{Q}_M f\Big).
+\label{eq:small_scale_mapping}
+\end{equation}
+This approximation implies the existence of a graph mapping $\Phi: \mathscr{X}^M \rightarrow \mathscr{X}^{M^\perp}$ such that $q_m(t) = \Phi\big(p_m(t)\big)$. This theoretical insight is the exact foundation of our architectural "rethink": because $q_m(t)$ is slaved to $p_m(t)$, we absolutely do not need to subject the high-frequency residuals to the $\mathcal{O}(N^4)$ global attention mechanism. Instead, the small-scale dynamics can be efficiently and implicitly reconstructed from the processed large-scale representation via learned nonlinear transformations (realized subsequently through the LGM transformation).
+
+\paragraph{Scale decomposition via Fourier Modes}
+To realize this continuous decomposition practically within a neural architecture, we design a \emph{Spectral Dynamics Embedding} based on Fourier decomposition. This offers both computational efficiency (via FFT with $\mathcal{O}(N \log N)$ complexity) and physical interpretability. Given a discretized field $u \in \mathbb{R}^{N_1 \times N_2 \times \cdots \times N_d \times d_{\text{in}}}$ over a $d$-dimensional spatial domain, each spatial point $u_{\mathbf{i}}$ can be projected onto a finite-dimensional Fourier space:
+\begin{equation}
+u_{\mathbf{i}} = \sum_{\|\mathbf{k}\| \leq N_{\max}} \hat{u}_{\mathbf{i},\mathbf{k}} \exp\left(\imath \frac{2\pi \mathbf{k} \cdot \mathbf{i}}{N}\right),
+\label{eq:fourier_expansion}
+\end{equation}
+where $\mathbf{k}$ denotes the frequency index, $N$ represents the grid resolution, and $\hat{u}_{\mathbf{i},\mathbf{k}}$ are the Fourier coefficients.
+The corresponding projections onto large-scale and small-scale subspaces are defined as:
+\begin{align}
+{p_m}_{\mathbf{i}} &= \mathcal{F}^{-1}\big[\mathscr{P}_M \mathcal{F}(u_{\mathbf{i}})\big] = \sum_{\|\mathbf{k}\| \leq M} \hat{u}_{\mathbf{i},\mathbf{k}} \exp\left(\imath \frac{2\pi \mathbf{k} \cdot \mathbf{i}}{N}\right) \in \mathscr{X}^{M}, \label{eq:large_scale_projection} \\
+{q_m}_{\mathbf{i}} &= \mathcal{F}^{-1}\big[\mathscr{Q}_M \mathcal{F}(u_{\mathbf{i}})\big] = \sum_{M < \|\mathbf{k}\| \leq N_{\max}} \hat{u}_{\mathbf{i},\mathbf{k}} \exp\left(\imath \frac{2\pi \mathbf{k} \cdot \mathbf{i}}{N}\right) \in \mathscr{X}^{M^\perp}, \label{eq:small_scale_projection}
+\end{align}
+where $\mathcal{F}$ and $\mathcal{F}^{-1}$ denote the forward and inverse Fourier transforms. The truncation operator $\mathscr{P}_M$ acts as an architectural filter, retaining only the lowest $M$ Fourier modes to isolate $p_m$. 
+
+By isolating the low-dimensional, long-range features ($p_m$), we construct an optimal latent space where global attention mechanisms can operate efficiently without being overwhelmed by the high-frequency residuals ($q_m$). This physically motivated spectral separation directly enables the $\mathcal{O}(N^3)$ attention scheme introduced in the following section.
+
+
+\subsection{Modeling Large-Scale Interaction via Kronecker-Structured Attention}\label{sec:kronecker_attention}
+Having established the spectral isolation of the large-scale component $p_m$ in Section \ref{sec:scale_decomposition}, we now focus on efficiently modeling its evolution. Understanding large-scale dynamics in complex systems requires capturing long-range dependencies and global interactions. Attention mechanisms naturally support such global modeling; however, standard implementations flatten spatial grids into 1D sequences, destroying geometric priors and incurring quadratic complexity. 
+Crucially, large-scale physical components are typically smooth and dominated by low-frequency modes. In classical PDE theory, such smooth fields on orthogonal domains frequently admit a \emph{separation of variables} \cite{evans2022partial}, implying their interaction kernels possess a \emph{structured low-rank representation} along coordinate axes. 
+
+Guided by this physical property, we assume the latent space projected by $\mathbb{R}^{N_1 \times N_2 \times d_{\text{in}}} \rightarrow \mathbb{R}^{N_1 \times N_2 \times d_n}$ is separable and thus propse a \textit{Kronecker-structured attention} backbone that leverages axis-wise separability. This drastically reduces computational cost while preserving the multi-dimensional global coupling essential for coarse-grained evolution.
+
+\paragraph{Attention as a Learnable Kernel Operator}
+From the integral-operator perspective, attention mechanisms serve as learnable kernel transforms capable of expressing nonlocal coupling \cite{cao2021choose}. We model the attention operator $\mathcal{A}$ as a data-dependent kernel integral operator acting on the large-scale state $p_m$:
+\begin{equation}
+(\mathcal{A}(p_m;\theta)v)(x) = \int_{D} \kappa_{\theta}(x, y, p_m(x), p_m(y)) v(y) \, dy, \quad \forall x \in D,
+\label{eq:attention_integral}
+\end{equation}
+where $D \subset \mathbb{R}^d$ is the spatial domain, $v$ is the value function, and $\kappa_{\theta}$ is a learnable kernel parametrized by $\theta$. In the discretized setting, a linear attention kernel $\kappa_{\theta}(x, y) = q(x) k^{\top}(y)$ aligns rigorously with the Petrov–Galerkin projections of transformer operators \cite{cao2021choose}. However, computing this full-rank kernel scales quadratically with spatial resolution ($\mathcal{O}(N^4)$ for 2D grids), which is prohibitive. We address this by completing our \textit{spectral dynamics embedding} and applying the \textit{Kronecker-structured attention} mechanism.
+
+\paragraph{Spectral Dynamics Embedding}
+To prepare the state for global interaction, we propose the dynamics embedding. While NLP tokens represent semantic concepts, our "tokens" represent the continuous physical state. To optimally embed this state, we operate in the frequency domain. 
+Building upon the spectral truncation that isolates the large-scale modes, let $\hat{p}_m \in \mathbb{C}^{M_1 \times M_2 \times d_{\text{in}}}$ be the truncated Fourier representation from Eq. (\ref{eq:large_scale_projection}). We enrich this large-scale representation by applying learnable complex-valued weights in the frequency domain, which is analogous to linear projections in standard attention but constrained by spectral priors:
+\begin{equation}
+\tilde{u} = \mathcal{F}^{-1}\left( \mathcal{W}_{\text{spec}} \star \hat{p}_m \right),
+\label{eq:spectral_embedding}
+\end{equation}
+where $\mathcal{W}_{\text{spec}} \in \mathbb{C}^{d_{\text{in}} \times d_{n} \times M_1 \times M_2}$ denotes the learnable spectral kernels, $\star$ denotes channel-wise multiplication, $d_n$ is the hidden dimension, and $\mathcal{F}^{-1}$ maps the features back to the physical domain (via zero-padding to $N_1 \times N_2$). This two-step embedding explicitly guarantees that the subsequent attention block operates strictly on a scale-separated, low-frequency latent state $\tilde{u} \in \mathbb{R}^{N_1 \times N_2 \times d_n}$.
+
+\paragraph{Kronecker-Structured Attention Mechanism}
+Following the embedding, we apply Kronecker-structured attention to mix features spatially. By leveraging the separability of the physical coordinate axes, we decompose the kernel function. For a 2D spatial domain with coordinates $\mathbf{x} = (x_1, x_2)$, we assume the kernel admits a Kronecker-type factorization:
+\begin{equation}
+\kappa_{\theta}(\mathbf{x}, \mathbf{y}) \approx \kappa_{\theta_1}(x_1, y_1) \cdot \kappa_{\theta_2}(x_2, y_2).
+\label{eq:kronecker_kernel}
+\end{equation}
+To realize this, we generate 1D features for each spatial dimension via axis-wise reduction. We apply global mean pooling along orthogonal axes followed by linear projections $\text{Proj}_x, \text{Proj}_y$:
+\begin{equation}
+\begin{aligned}
+\tilde{u}_{x}  &= \text{Proj}_x\left(\text{Mean}_{y}(\tilde{u})\right) \in \mathbb{R}^{N_1 \times d_{n}}, \\
+\tilde{u}_{y}  &= \text{Proj}_y\left(\text{Mean}_{x}(\tilde{u})\right) \in \mathbb{R}^{N_2 \times d_{n}}.
+\end{aligned}
+\label{eq:axis_contraction}
+\end{equation}
+These reduced features are processed by a position-aware module. We employ separate query ($\phi_Q$) and key ($\phi_K$) networks, followed by rotary position embeddings (RoPE) \cite{su2024roformer} to inject relative positional information. For coordinates $i \in \{1, \dots, N_1\}$ and $j \in \{1, \dots, N_2\}$, and positional frequencies $\theta_x^{(i)}, \theta_y^{(j)}$, the rotary transformations are:
+\begin{equation}
+\begin{aligned}
+\tilde{q}_x[i]  &= \mathcal{R}_{\theta_x^{(i)}} \cdot \phi_Q\left(\tilde{u}_x[i]\right), \quad \tilde{k}_x[i]  = \mathcal{R}_{\theta_x^{(i)}} \cdot \phi_K\left(\tilde{u}_x[i]\right), \\
+\tilde{q}_y[j]  &= \mathcal{R}_{\theta_y^{(j)}} \cdot \phi_Q\left(\tilde{u}_y[j]\right), \quad \tilde{k}_y[j]  = \mathcal{R}_{\theta_y^{(j)}} \cdot \phi_K\left(\tilde{u}_y[j]\right),
+\end{aligned}
+\label{eq:rope_transformation}
+\end{equation}
+where $\mathcal{R}_{\theta} \in \mathbb{R}^{d_k \times d_k}$ is the standard block-diagonal rotation matrix. The axis-specific kernel matrices are computed via dot products:
+\begin{equation}
+\mathcal{K}_1[i, j] = \tilde{q}_x[i]^\top \tilde{k}_x[j], \quad \mathcal{K}_2[i, j] = \tilde{q}_y[i]^\top \tilde{k}_y[j].
+\label{eq:kernel_matrices_rope}
+\end{equation}
+Given the value tensor $\tilde{V} \in \mathbb{R}^{N_1 \times N_2 \times d_{n}}$, the final spatial mixing for channel $c$ is computed via sequential matrix chaining:
+\begin{equation}
+(\mathcal{A}\tilde{V})_c = \mathcal{K}_1 \tilde{V}_c \mathcal{K}_2^\top, \quad c=1,\dots,d_{n}.
+\label{eq:kronecker_output}
+\end{equation}
+In vector form, this operation aggregates information sequentially along each axis:
+\begin{equation}
+\mathcal{A} \tilde{v}_c \left(x_{ij}\right)=\sum_{k=1}^{N_1} \kappa_{\theta_1}\left(x_i, y_k\right)\left(\sum_{l=1}^{N_2} \kappa_{\theta_2}\left(x_j, y_l\right) \tilde{v}_c\left(y_{kl}\right)\right).
+\label{eq:kronecker_vector}
+\end{equation}
+This physics-informed factorization directly decouples the computational complexity from $\mathcal{O}(N^4)$ to $\mathcal{O}(N^3)$. Unlike purely empirical factorized attention \cite{li2023scalable}, our derivation is fundamentally grounded in the separation-of-variables assumption, ensuring that this aggressive complexity reduction is safely applied only to the low-frequency manifold.
+
+
+\subsection{Recovering Full-Scale Dynamics via Mixing Transformations}\label{sec:mixing_transformations}
+Having modeled the large-scale evolution $p_m$ via the efficient Kronecker-structured attention (Section \ref{sec:kronecker_attention}), we now address the reconstruction of the full-scale state $u = p_m + q_m$. As established in Section \ref{sec:scale_decomposition}, the small-scale component $q_m$ is implicitly slaved to the large-scale dynamics via a mapping $\Phi: \mathscr{X}^M \rightarrow \mathscr{X}^{M^\perp}$ (Eq. \eqref{eq:small_scale_mapping}). 
+However, reconstructing $q_m$ solely through linear transformations of $p_m$ faces a fundamental bottleneck: because $p_m$ is constructed via spectral truncation (Eq. \eqref{eq:large_scale_projection}), it is strictly band-limited to frequencies $\|\mathbf{k}\| \leq M$. Linear operations confined to this subspace cannot generate high-frequency components beyond the cutoff, effectively preventing the recovery of fine-scale structures. To overcome this spectral limitation and approximate the nonlinear mapping $\Phi$, we adopt the \textit{LGM} transformation \cite{lai2025dymixop}. Inspired by multiscale energy cascades in physical systems, LGM leverages nonlinear multiplicative interactions to expand the spectral bandwidth and implicitly reconstruct the small-scale residuals.
+
+\paragraph{Local-Global-Mixing Transformation}
+Formally, the LGM transformation $\mathscr{M}_\theta$ is defined as the Hadamard product of a global integral operator $\mathscr{G}_\theta$ and a local transformation $\mathscr{L}_\theta$ acting on the latent state $u$:
+\begin{equation}
+\mathscr{M}_\theta(u)(x) = \mathscr{L}_\theta(u)(x) \odot \mathscr{G}_\theta(u)(x), \quad \forall x \in D.
+\label{eq:lgm_definition}
+\end{equation}
+In our architecture, the global operator $\mathscr{G}_\theta$ is instantiated specifically as the \textit{Kronecker-structured attention} block, i.e., $\mathscr{G}_\theta(u) \equiv \mathcal{A}(\tilde{u})$. This ensures the global branch captures long-range dependencies using the efficient $\mathcal{O}(N^3)$ axis-wise decomposition derived in Eq. \eqref{eq:kronecker_vector}. The local operator $\mathscr{L}_\theta$, conversely, is designed to capture fine-grained spatial details and is implemented via pointwise MLPs to maintain computational efficiency. 
+
+This multiplicative formulation mirrors the nonlinear convective interactions (e.g., $u \cdot \nabla u$) that drive frequency mixing in fluid dynamics, offering a distinct spectral advantage over standard additive compositions (e.g., residual connections). Let $\hat{g}$ and $\hat{l}$ denote the Fourier spectra of the global and local outputs, with effective bandwidths $K$ and $M$ respectively. By the Convolution Theorem, the spectrum of the mixed output $\hat{m}$ satisfies $\text{supp}(\hat{m}) \subseteq \{\mathbf{k} : \|\mathbf{k}\| \leq K + M\}$. Because the local operator typically possesses a much larger effective bandwidth ($M \gg K$), the LGM transformation systematically modulates the global low-frequency carrier with local high-frequency details. This enables the representation of frequencies strictly greater than the global truncation threshold $K$, allowing DynFormer to recover the small-scale residual $q_m$ discarded during the initial spectral decomposition.
+
+\paragraph{Integration into Full-Scale Dynamics Layers (FSDL)}
+The LGM transformation serves as the essential nonlinear bridge between hierarchical dynamic scales. By integrating the Spectral Dynamics Embedding, Kronecker-structured attention, and the LGM transformation into a cohesive block, we form the \emph{Full-Scale Dynamics Layer (FSDL)}. 
+
+Within the DynFormer architecture, stacking multiple FSDLs enables the network to approximate the multiscale mapping $\Phi(p_m)$. By enforcing this mixing structure on the latent states produced by the large-scale dynamics learner, we implicitly model the residual fine-scale dynamics without incurring the $\mathcal{O}(N^4)$ cost of full-grid attention. This ensures that the network not only propagates physically consistent large-scale correlations but also synthesizes the small-scale textures required for accurate full-field reconstruction. The output of the FSDL, denoted $\hat{u}_{\text{FSDL}} \in \mathbb{R}^{N_1 \times N_2 \times d_{n}}$, serves as the enriched feature representation for subsequent evolutionary steps.
+
+
+\subsection{Evolutionary Operator with DynFormer}\label{sec:dynformer_operator}
+Having established the scale decomposition (Section \ref{sec:scale_decomposition}), the efficient large-scale learner (Section \ref{sec:kronecker_attention}), and the multiscale mixing transformation (Section \ref{sec:mixing_transformations}), we now assemble these components into the complete DynFormer evolutionary operator. The architecture is designed to simulate the time evolution of complex physical systems by stacking Full-Scale Dynamics Layers (FSDLs) within a dynamics-informed framework that explicitly mirrors the structural decomposition of Eq. \eqref{eq:decomposed_dynamics}.
+
+\paragraph{Full-Scale Dynamics Layer (FSDL) Internal Routing}
+While Section \ref{sec:mixing_transformations} established the LGM transformation as the core mechanism for full-scale recovery, the internal routing of the FSDL is designed to approximate the composite differential operator $\mathscr{A} = \mathscr{L} + \mathscr{N}$ (Eq. \eqref{eq:general_dynamics}). To resolve linear and nonlinear dynamics independently, which is proposed in \cite{lai2025dymixop} and analogous to \emph{operator splitting} techniques in classical numerical PDE solvers \cite{gottlieb1977numerical}, the FSDL employs a multi-branch structure. Specifically, the dynamic update $\mathscr{F}_\theta(v)$ acting on a latent state $v \in \mathbb{R}^{N_1 \times N_2 \times d_n}$ is approximated by summing $n_l$ linear branches and $n_n$ nonlinear branches:
+\begin{align}
+\mathscr{F}_\theta(v) = \underbrace{\sum_{a=1}^{n_l} \mathscr{M}^{\mathscr{L}^{a}}_\theta(v)}_{\text{Approximation of } \mathscr{L}v} + \underbrace{\Psi_\theta\left[\sum_{b=1}^{n_n} \mathscr{M}^{\mathscr{N}^{b}}_\theta(v)\right]}_{\text{Approximation of } \mathscr{N}(v)},
+\label{eq:fsdl_definition}
+\end{align}
+where $\mathscr{M}^{\mathscr{L}}_\theta$ and $\mathscr{M}^{\mathscr{N}}_\theta$ represent LGM transformations dedicated to capturing linear and nonlinear dynamics, respectively. The operator $\Psi_\theta$ serves as a learnable residual refinement module, implemented as a pointwise MLP, to enhance the representation of high-frequency nonlinear interactions. This physically motivated decoupling allows the layer to handle stiff and non-stiff dynamic components separately. Notably, the external forcing term $f$ can be recovered implicitly by the operator $\Psi_\theta$, maintaining network simplicity without sacrificing expressiveness.
+
+\paragraph{Dynamics-Informed Architecture}
+To simulate long-term system evolution, multiple FSDLs are sequentially connected to form a deep architecture. The network depth $L$ can be interpreted as a discretized surrogate for the time evolution of the system. Let $u$ denote the physical input field and $v$ denote the internal latent state. Assuming a continuous-time transformation induced by the operator $\mathscr{F}_\theta$, the architecture treats the depth $L$ as temporal discretization steps, yielding the discrete evolutionary dynamics:
+\begin{align}
+v_l = v_{l-1} + \Delta t_{\theta_l} \mathscr{F}_{\theta_l}(v_{l-1}), \quad l=1, \dots, L,
+\label{eq:arch_evolution}
+\end{align}
+where $v_0 = \mathscr{T}_{\text{up}}(u)$ is the lifted latent state, and $\Delta t_{\theta_l}$ denotes a learnable temporal scaling factor for layer $l$. This formulation mimics a nonuniform, learnable numerical integration scheme. Depending on the physical nature of the target system, Eq. \eqref{eq:arch_evolution} provides three architectural variants:
+
+\begin{enumerate}[(i)]
+    \item Hierarchical Variant: Each FSDL receives the output of the previous layer, progressively refining the state through sequential updates. This aligns with standard autoregressive time-stepping schemes for evolutionary PDEs, where the state at $t+\Delta t$ depends strictly on $t$.
+    \item Parallel Variant: All FSDLs share the same input $v_0$ and evolve the state in parallel, accumulating the output with a shared temporal step:
+    \begin{align}
+    v_{L} = v_0 + \Delta t \sum_{l=1}^{L} \mathscr{F}_{\theta_l}(v_0).
+    \label{eq:arch_parallel}
+    \end{align}
+    This variant is optimally suited for steady-state problems (e.g., Darcy flow) where the solution represents an equilibrium field rather than a temporal trajectory.
+    \item Hybrid Variant: We decouple the update step $\Delta t_{\theta_l}$ across layers while maintaining sequential dependency:
+    \begin{align}
+    v_{L} = v_0 + \sum_{l=1}^{L}  \Delta t_{\theta_l} \mathscr{F}_{\theta_l}(v_{l-1}).
+    \label{eq:arch_hybrid}
+    \end{align}
+    This formulation acts as a learnable, adaptive Runge-Kutta method. By allowing the network to dynamically adjust its "time step" per layer, it offers the optimal balance between numerical stability and expressiveness, making it highly effective for chaotic systems with extreme multiscale temporal dynamics (e.g., Navier-Stokes).
+\end{enumerate}
+
+\paragraph{Complete DynFormer Framework}
+The overall DynFormer architecture (Fig. \ref{fig:arch}) forms an end-to-end operator learning framework consisting of three stages:
+\begin{enumerate}[(i)]
+    \item Lifting Transformation: A pointwise operator $\mathscr{T}_{\text{up}}: \mathbb{R}^{N_1 \times N_2 \times d_{\text{in}}} \rightarrow \mathbb{R}^{N_1 \times N_2 \times d_n}$ projects the input field $u$ into the expanded latent space $v_0$.
+    \item Latent Evolution: A sequence of $L$ FSDLs evolves the latent state (e.g., via the Hybrid scheme in Eq. \eqref{eq:arch_hybrid}), applying the scale-aware dynamics approximation from Eq. \eqref{eq:fsdl_definition}.
+    \item Projection Transformation: A pointwise operator $\mathscr{T}_{\text{down}}: \mathbb{R}^{N_1 \times N_2 \times d_n} \rightarrow \mathbb{R}^{N_1 \times N_2 \times d_{\text{out}}}$ maps the final latent state $v_L$ back to the physical solution space, producing the predicted field $\hat{u}$.
+\end{enumerate}
+The complete forward pass is summarized as:
+\begin{align}
+\hat{u} = \mathscr{T}_{\text{down}}\left( v_L \right), \quad \text{where } v_L = \text{FSDL}_L \circ \cdots \circ \text{FSDL}_1 \left( \mathscr{T}_{\text{up}}(u) \right).
+\label{eq:dynformer_forward}
+\end{align}
+
+\begin{figure}[hbtp]
+  \centering
+  \includegraphics[width=0.95\textwidth]{Figure_2.pdf}
+  \caption{Illustration of the DynFormer architecture.}
+  \label{fig:arch}
+\end{figure}
+
+\paragraph{Computational Complexity}
+The computational efficiency of DynFormer stems from two critical design choices. First, the Kronecker-structured attention reduces the spatial complexity from $\mathcal{O}(N^4)$ to $\mathcal{O}(N^3)$ for 2D grids of size $N \times N$. Second, the spectral truncation at $M$ modes bounds the frequency-domain operations to $\mathcal{O}(M^2 \log M)$ via FFT. For typical configurations where $M \ll N$ (e.g., $M = N/4$), the overall complexity per FSDL is vastly dominated by the $\mathcal{O}(N^3)$ Kronecker attention. This yields massive memory and computational savings compared to standard transformer-based neural operators, without sacrificing the expressive power required for multi-scale PDEs (Table \ref{tab:complexity_comparison}).
+
+\begin{table}[h]
+\centering
+\caption{Computational complexity comparison for 2D spatial domains of size $N \times N$.}
+\label{tab:complexity_comparison}
+\begin{tabular}{l c}
+\toprule
+\textbf{Method} & \textbf{Complexity} \\
+\midrule
+Standard Self-Attention & $\mathcal{O}(N^4)$ \\
+Kronecker Attention & $\mathcal{O}(N^3)$ \\
+Spectral Embedding & $\mathcal{O}(M^2 \log M)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+\section{Results}
+\subsection{Baselines}
+(i) \textbf{ONO} (Orthogonal Neural Operator) implements a novel orthogonal attention mechanism: rather than softmax, it orthogonalizes learned eigenfunction projections. It separates eigenfunction approximation and solution learning into two disentangled pathways \cite{xiao2023improved}.
+(ii) \textbf{FactFormer} (Factorized Transformer) employs axial factorized attention: it decomposes high-dimensional inputs into multiple 1D sub-functions using a learnable projection, then computes attention among these sub-components \cite{li2023scalable}.
+(iii) \textbf{OFormer} (Operator Transformer) combines self‑attention and cross‑attention layers, along with pointwise MLP processing \cite{li2022transformer}.
+(iv) \textbf{GNOT} (General Neural Operator Transformer) introduces heterogeneous normalized attention paired with a geometric gating mechanism, enabling adaptive interaction over irregular meshes and capturing multi-scale behaviors \cite{hao2023gnot}.
+(v) \textbf{Transolver} proposes Physics‑Attention by grouping mesh points into learnable slices (physical-state tokens) and attending over these tokens instead of raw points \cite{wu2024transolver}.
+
+\subsection{Benchmarks}
+To validate both the scalability and versatility of our method, we evaluate it across four classic PDE models that exhibit distinct mathematical behaviors and physical regimes. These benchmarks span parabolic, elliptic, and hyperbolic behaviors, from chaotic, dissipative, steady-state, to conservation-law regimes, allowing us to thoroughly assess the range and robustness of our operator learner:
+(i) \textbf{1D Kuramoto Sivashinsky} (KS), a fourth-order nonlinear parabolic PDE originally derived to model diffusive‑thermal instabilities. The KS equation provides a stringent test of a model’s ability to capture chaotic dissipative dynamics and scale separation in one spatial dimension.
+(ii) \textbf{2D Darcy Flow}, a second-order elliptic PDE describing steady-state porous‑media flow with spatially varying permeability. As a model for steady elliptic behavior, Darcy flow tests how well an operator‑learning method generalizes across sharp spatial heterogeneities under global equilibrium conditions.
+(iii) \textbf{2D Navier-Stokes} (NS), a parabolic PDE system governing two-dimensional incompressible viscous fluid motion. It introduces highly nonlinear advection and diffusion, offering a rigorous test of a model's capacity to resolve fine-scale turbulent cascades.
+(iv) \textbf{3D Shallow Water} (SW), a set of hyperbolic conservation‑law PDEs. These equations model large‑scale geophysical wave dynamics. Their nonlinearity, shock‐like features, and global spherical geometry serve as benchmarks for transferring learned operators to complex, large‑scale curvilinear domains.
+
+\subsection{Experimental Setup and Evaluation Metrics}\label{sec:experimental_setup}
+Comparative evaluations in the neural operator literature often suffer from performance gains attributed to meticulous hyperparameter tuning or task-specific architectural adjustments rather than fundamental algorithmic superiority. This reliance on over-optimization creates significant challenges for establishing fair benchmarks \cite{mcgreivy2024weak}. To address this, we evaluate all baselines using standardized configurations, strictly avoiding task-specific parameter engineering.
+
+\paragraph{Capacity Scaling and Memory Alignment}
+Our scaling strategy focuses principally on adjusting the hidden dimension and network depth to vary model capacity. Crucially, we align these hyperparameter settings based on \textbf{peak GPU memory usage} rather than parameter count. Because parameter count often scales nonlinearly with actual computational costs (especially in attention-based models), memory usage serves as a more practical metric for fairness. Under these strict constraints, we construct three model variants—Tiny, Medium, and Large—spanning a diverse range of GPU memory budgets. This ensures our assessment reflects the intrinsic potential of the architecture. The results reported in Section \ref{sec:main_results} correspond to the optimal configuration found within these memory-aligned constraints.
+
+\paragraph{Training Hyperparameters}
+To ensure reproducibility and mitigate stochastic variations, all models are trained using a uniform configuration. Training proceeds for $500$ epochs using the AdamW optimizer \cite{loshchilov2017decoupled} with an initial learning rate of $10^{-3}$, a weight decay of $0.97$, and a step size of $7$. A StepLR scheduler adjusts the learning rate dynamically. The batch size is fixed at $64$ across all experiments on NVIDIA A800 GPUs. Furthermore, all experiments are conducted using two distinct random seeds $\{123, 456\}$, and the averaged results are reported to evaluate robustness.
+
+\paragraph{Data Normalization and Loss Function}
+Let $\mathcal{D} = \{ (a_i, u_i) \}_{i=1}^{|\mathcal{D}|}$ denote the dataset, where $a_i$ is the input field and $u_i \in \mathbb{R}^{n}$ is the ground truth solution. All datasets are normalized using min-max normalization to stabilize training:
+\begin{equation}
+u^* = \frac{u - u_{\text{min}}}{u_{\text{max}} - u_{\text{min}}}.
+\label{eq:minmax_norm}
+\end{equation}
+For optimization and evaluation, we adopt the relative mean squared error (MSE) to address scenarios with extremely minimal solution magnitudes and to prevent gradient vanishing. The relative MSE $\epsilon$ is computed as:
+\begin{equation}
+\epsilon = \frac{1}{|\mathcal{D}|} \sum_{i=1}^{|\mathcal{D}|} \frac{\| \hat{u}_i - u_i \|_2^2}{\| u_i \|_2^2},
+\label{eq:relative_mse}
+\end{equation}
+where $\hat{u}_i$ denotes the predicted solution.
+
+\paragraph{Log-Min-Max Normalized Score}
+To enable an intuitive and fair comparison across diverse benchmarks—which exhibit vastly different loss magnitudes due to physical scales and problem complexity—we introduce a Log-Min-Max normalized score mapped to the $[0, 100]$ interval. Let $\epsilon_{\text{min}}$ and $\epsilon_{\text{max}}$ denote the smallest and largest relative MSE values observed among all evaluated models on a specific benchmark. The score is computed as:
+\begin{equation}
+\text{Score} = 100 \cdot \left(1 - \frac{\log(\epsilon) - \log(\epsilon_{\text{min}})}{\log(\epsilon_{\text{max}}) - \log(\epsilon_{\text{min}})}\right).
+\label{eq:log_min_max_score}
+\end{equation}
+This logarithmic transformation ensures uniform sensitivity across multiple orders of magnitude, emphasizing relative improvement over absolute error scale. 
+
+\subsection{Main Comparison Results}
+\label{sec:main_results}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{Figure_3.pdf}
+\caption{Performance comparison of neural operator architectures across diverse PDE benchmarks. 
+(a) Aggregated Log-Min-Max normalized scores (0--100) averaged over all benchmarks, model variants (Tiny/Medium/Large), and random seeds, highlighting DynFormer's substantial lead over state-of-the-art baselines. 
+(b) Per-benchmark breakdown showing DynFormer's dominance across 1D Kuramoto-Sivashinsky, 2D Darcy, 2D Navier-Stokes, and 3D Shallow Water equations.}
+\label{fig:performance}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{Figure_4.pdf}
+\caption{Qualitative visualization and error analysis on the 2D Navier-Stokes benchmark. 
+Top row: Predicted vorticity fields compared against Ground Truth. DynFormer captures fine-scale turbulent structures with high fidelity, whereas baselines exhibit smoothing or artifacts. 
+Bottom left: Error evolution over simulation timesteps, demonstrating DynFormer's stability. 
+Bottom right: Mean Squared Error (MSE) comparison, where DynFormer achieves an order-of-magnitude reduction compared to competing methods.}
+\label{fig:visualization}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{Figure_5.pdf}
+\caption{Computational efficiency and memory--performance trade-offs.
+(a) Peak GPU memory consumption (MB) for Tiny, Medium, and Large variants. All baselines are built with comparable consumptions.
+(b) Score per Memory ratio, illustrating DynFormer's superior efficiency by reaching 9.6. 
+(a) Scalability analysis across Tiny, Medium, and Large model variants. DynFormer consistently achieves higher performance scores for equivalent or lower memory usage, with its Tiny variant outperforming the Large variants of several baselines.}
+\label{fig:efficiency}
+\end{figure}
+
+\begin{table}[htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{3pt}
+  \renewcommand{\arraystretch}{1.2}
+  \caption{Comprehensive performance comparison across PDE benchmarks. Metrics reported per model size variant (Tiny/Medium/Large): peak GPU memory usage (GB), relative MSE loss on test dataset, and averaged training time (seconds) per epoch. The \textbf{Improvement} row indicates the percentage reduction in error achieved by DynFormer compared to the previous state-of-the-art (SOTA). \textbf{Bold}, \textbf{\color{bestblue}blue}, and \uline{underline} indicate the 1\textsuperscript{st}, 2\textsuperscript{nd}, and 3\textsuperscript{rd} best results among competitor models. DynFormer results are highlighted with gray background.}
+  \label{tab:results_comparison_detailed}
+  \sisetup{
+    output-exponent-marker = \ensuremath{\mathrm{e}},
+    retain-explicit-plus = false,
+    mode = match,
+    reset-text-series = false,
+    reset-text-family = false,
+    reset-text-shape = false,
+    text-series-to-math = true,
+    exponent-mode = scientific,
+    table-format = 1.2e-2
+  }
+  \resizebox{\textwidth}{!}{
+  \begin{tabular}{l c *{4}{c c S c}}
+    \toprule
+    & & \multicolumn{4}{c}{\textbf{1D}} & \multicolumn{8}{c}{\textbf{2D}} & \multicolumn{4}{c}{\textbf{3D}} \\
+    \cmidrule(lr){3-6} \cmidrule(lr){7-14} \cmidrule(lr){15-18}
+    \multirow{2}{*}{\textbf{Model}} & \multirow{2}{*}{\textbf{Sz}} & \multicolumn{4}{c}{\textbf{Kuramoto-Sivashinsky}} & \multicolumn{4}{c}{\textbf{Darcy}} & \multicolumn{4}{c}{\textbf{Navier-Stokes}} & \multicolumn{4}{c}{\textbf{Shallow Water}} \\
+    \cmidrule(lr){3-6} \cmidrule(lr){7-10} \cmidrule(lr){11-14} \cmidrule(lr){15-18}
+    & & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} \\
+    \midrule
+    \multirow{3}{*}{FactFormer \cite{li2023scalable}}
+      & T & 0.8 & 6.6K & 5.12e-01 & 2.0 & 0.7 & 38.9K & {\third{8.12e-04}} & 0.4 & 7.6 & 25.3K & 1.85e-01 & 12.3 & 4.1 & 25.6K & 1.24e-01 & 13.3 \\
+      & M & 2.9 & 51.4K & 3.74e-01 & 3.6 & 2.9 & 476.1K & {\second{1.40e-04}} & 1.0 & 14.8 & 99.2K & 1.52e-01 & 13.5 & 7.7 & 99.9K & {\second{5.58e-02}} & 13.4 \\
+      & L & 12.3 & 638.0K & {\third{3.38e-01}} & 6.8 & 13.0 & 7.3M & {\best{7.67e-05}} & 4.8 & 23.7 & 202.6K & {\second{1.41e-01}} & 16.1 & 12.3 & 203.3K & {\best{2.66e-02}} & 15.1 \\
+    \addlinespace[0.3em]
+    \multirow{3}{*}{GNOT \cite{hao2023gnot}}
+      & T & 0.9 & 14.1K & 1.00e+00 & 2.5 & 0.8 & 8.0K & 7.60e-02 & 0.5 & 7.5 & 3.8K & 9.96e-01 & 11.1 & 3.9 & 3.9K & 5.94e-01 & 12.1 \\
+      & M & 3.0 & 59.2K & 1.00e+00 & 4.7 & 3.1 & 103.5K & 7.60e-02 & 1.2 & 14.0 & 7.3K & 9.99e-01 & 16.8 & 7.0 & 7.4K & 4.65e-01 & 15.6 \\
+      & L & 14.6 & 993.3K & 1.00e+00 & 9.0 & 11.6 & 786.1K & 7.62e-02 & 4.1 & 23.8 & 16.4K & 9.94e-01 & 28.1 & 12.3 & 16.5K & 4.75e-01 & 21.9 \\
+    \addlinespace[0.3em]
+    \multirow{3}{*}{OFormer \cite{li2022transformer}}
+      & T & 0.9 & 11.6K & 9.49e-01 & 2.2 & 0.9 & 11.6K & 4.54e-03 & 0.4 & 7.1 & 3.0K & 9.91e-01 & 12.4 & 3.7 & 3.1K & 3.52e-01 & 12.9 \\
+      & M & 2.7 & 92.0K & 6.47e-01 & 3.1 & 2.6 & 91.9K & 3.14e-03 & 0.9 & 13.6 & 11.6K & 9.86e-01 & 13.8 & 7.0 & 11.7K & 2.31e-01 & 13.0 \\
+      & L & 11.3 & 1.4M & {\best{1.77e-01}} & 5.3 & 12.3 & 1.7M & 9.84e-04 & 4.5 & 24.9 & 33.5K & 9.72e-01 & 17.4 & 12.6 & 33.7K & 1.39e-01 & 14.6 \\
+    \addlinespace[0.3em]
+    \multirow{3}{*}{ONO \cite{xiao2023improved}}
+      & T & 0.8 & 21.1K & 7.71e-01 & 2.3 & 0.9 & 25.6K & 9.45e-03 & 0.5 & 8.2 & 8.5K & 9.99e-01 & 13.2 & 4.4 & 8.9K & 9.94e-01 & 12.9 \\
+      & M & 3.0 & 152.1K & 7.89e-01 & 5.1 & 3.1 & 151.0K & 9.42e-03 & 1.2 & 14.0 & 17.3K & 9.78e-01 & 16.3 & 7.5 & 17.8K & 9.50e-01 & 15.0 \\
+      & L & 13.2 & 1.2M & 1.05e+00 & 10.8 & 11.3 & 1.2M & 3.37e-01 & 4.0 & 23.8 & 38.7K & 7.93e-01 & 21.9 & 12.3 & 39.3K & 9.89e-01 & 17.9 \\
+    \addlinespace[0.3em]
+    \multirow{3}{*}{Transolver \cite{wu2024transolver}}
+      & T & 0.8 & 80.4K & 4.66e-01 & 2.0 & 0.8 & 65.1K & 1.32e-03 & 0.4 & 8.0 & 22.0K & {\third{1.51e-01}} & 10.9 & 4.7 & 22.4K & 2.12e-01 & 10.5 \\
+      & M & 2.7 & 369.7K & 5.06e-01 & 3.7 & 2.6 & 283.6K & 9.61e-04 & 1.0 & 13.9 & 42.9K & 1.92e-01 & 13.8 & 7.2 & 43.4K & 1.73e-01 & 11.7 \\
+      & L & 13.5 & 2.8M & {\second{1.93e-01}} & 7.2 & 12.3 & 2.8M & 6.88e-03 & 4.6 & 23.5 & 95.8K & {\best{1.27e-01}} & 18.6 & 12.1 & 96.5K & {\third{1.20e-01}} & 16.9 \\
+    \midrule
+    \rowcolor{rowgray}
+    & T & 1.0 & 1.2K & 1.69e-01 & 3.9 & 0.7 & 32.6K & 3.64e-04 & 0.7 & 6.9 & 15.1K & 9.66e-02 & 12.9 & 3.2 & 7.0K & 3.23e-02 & 13.8 \\
+    \rowcolor{rowgray}
+    & M & 2.8 & 5.9K & {\best{8.63e-03}} & 5.7 & 2.4 & 162.9K & 3.06e-04 & 1.4 & 13.3 & 57.9K & 5.03e-02 & 12.8 & 7.1 & 39.7K & 6.18e-03 & 14.9 \\
+    \rowcolor{rowgray}
+    \multirow{-3}{*}{\textbf{DynFormer(Ours)}} & L & 12.9 & 163.5K & 2.30e-02 & 11.4 & 14.1 & 3.4M & {\best{2.19e-04}} & 3.6 & 24.6 & 110.7K & {\best{4.79e-02}} & 17.2 & 11.9 & 82.9K & {\best{4.57e-03}} & 18.9 \\
+    \midrule
+    % \rowcolor{rowgray}
+    \multicolumn{2}{@{}l}{\textbf{\textit{Improvement vs. SOTA}}}  & & & {\imp{95.1}} & & & & {-} & & & & {\imp{62.3}} & & & & {\imp{82.8}} & \\
+    \bottomrule
+  \end{tabular}
+  }
+\end{table}
+
+To comprehensively evaluate the efficacy of DynFormer, we conducted comparative experiments against five state-of-the-art neural operator baselines across four distinct PDE benchmarks. The aggregated performance metrics are summarized in Figure~\ref{fig:performance}, while detailed quantitative results are provided in Table~\ref{tab:results_comparison_detailed}. 
+
+\paragraph{Performance on Various Benchmarks}
+As illustrated in Figure~\ref{fig:performance}(a), DynFormer achieves a dominant aggregate score of 80.6 across all variants and benchmarks, substantially outperforming the nearest competitor, FactFormer (scoring 53.7). This aggregate advantage confirms that DynFormer's dynamics-informed architecture successfully generalizes across diverse physical regimes. Crucially, the memory-aligned evaluation protocol ensures these gains are driven by our theoretical architectural advantages, specifically spectral scale separation and mixing, rather than computational inflation.
+Examining performance at the individual benchmark level (Figure~\ref{fig:performance}(b) and Table~\ref{tab:results_comparison_detailed}) reveals how DynFormer's theoretical mechanisms translate into empirical success:
+\begin{itemize}
+    \item 1D Kuramoto-Sivashinsky (KS): DynFormer achieves an unparalleled score of 66, demonstrating a 95.1$\%$ error reduction over the SOTA. This highlights the effectiveness of our \textit{Scale Decomposition}. By isolating the large-scale chaotic carriers from the stiff, fourth-order hyperdiffusive noise, DynFormer maintains long-term temporal stability where models without scale separation fail entirely (e.g., Transolver: scoring 19).
+    
+    \item 2D Darcy Flow: DynFormer achieves a highly competitive score of 84, while FactFormer attains 88. Darcy flow is an elliptic, linear diffusion-dominated system that strictly relies on steady-state spatial interpolation rather than nonlinear frequency mixing. This result suggests that while \textit{LGM Transformation} is highly optimized for transient, nonlinear dynamics, DynFormer still maintains robust spatial operator approximation capabilities under highly constrained global equilibrium conditions.
+
+    \item 2D Navier-Stokes (NS): DynFormer achieves a score of 90, opening a massive performance gap over FactFormer (scoring 59). This explicitly validates the \textit{LGM Transformation}. While other models suffer from numerical diffusion, DynFormer's multiplicative mixing expands the spectral bandwidth, allowing it to accurately recover sub-grid scale turbulent cascades and nonlinear advective interactions.
+    
+    \item 3D Shallow Water (SW): DynFormer demonstrates robust generalization to hyperbolic wave dynamics, scoring 82 and achieving an 82.8$\%$ error reduction over the SOTA. The efficient \textit{Kronecker-Structured Attention} explicitly captures the global planetary-scale geostrophic balances, while the nonlinear branches resolve the localized wave-breaking phenomena.
+\end{itemize}
+
+\paragraph{Qualitative Assessment and Error Stability}
+Complementing the quantitative findings, Figure~\ref{fig:visualization} provides visual validation of DynFormer's theoretical claims on the 2D Navier-Stokes benchmark. Visually, DynFormer is the only model that avoids artificial numerical diffusion, preserving the crisp, high-frequency filamentary structures of the ground truth. This is the direct empirical result of the LGM module overcoming the spectral truncation limits of the global attention mechanism. FactFormer and Transolver exhibit severe smoothing artifacts, confirming that without an explicit nonlinear mixing mechanism, small-scale residuals ($q_m$) are lost. Quantitatively, the error evolution trajectory (Figure~\ref{fig:visualization}, bottom left) confirms DynFormer's stability, reflecting the architectural benefit of decoupling linear and nonlinear dynamic branches (Eq. \eqref{eq:fsdl_definition}).
+
+\paragraph{Computational Efficiency Trade-offs}
+Figure~\ref{fig:efficiency} proves that the reduction of spatial complexity from $\mathcal{O}(N^4)$ to $\mathcal{O}(N^3)$ via Kronecker-structured attention translate directly into superior hardware efficiency. The score-per-memory metric (Figure~\ref{fig:efficiency}(b)) shows DynFormer achieving 9.6, nearly double that of FactFormer (scoring 5.1). 
+The scalability analysis (Figure~\ref{fig:efficiency}(c)) reveals that even the \textit{Tiny} variant of DynFormer achieves competitive absolute scores while consuming substantially less memory than the \textit{Large} variants of baseline methods. For instance, on the 3D Shallow Water benchmark, DynFormer-Medium achieves a relative MSE of $6.18 \times 10^{-3}$, outperforming FactFormer-Large (MSE $2.66 \times 10^{-2}$) while using 42\% less memory. Furthermore, DynFormer maintains highly competitive training throughput (Table~\ref{tab:results_comparison_detailed}), confirming that the spectral embedding and Kronecker attention add minimal wall-clock overhead while drastically reducing memory footprint.
+
+\subsection{Ablation Experiments}\label{sec:ablation_experiments}
+To validate the specific theoretical design choices underlying DynFormer, we conduct a series of ablation studies across the 2D Darcy Flow and 2D Navier-Stokes benchmarks. These experiments systematically isolate the contributions of the Kronecker-structured attention, spectral embedding, mixing transformations, and evolutionary flow. 
+
+\paragraph{Impact of Kronecker-Structured Attention (E1)}
+We first evaluate the efficiency of the proposed Kronecker-structured (KS) attention mechanism (Table~\ref{tab:ablation_e1}). Classical full-rank attention incurs prohibitive computational costs, consuming 57.5 GB of GPU memory on the 2D NS benchmark due to its $\mathcal{O}(N^4)$ complexity, and fails to converge (Loss: $4.07 \times 10^{-1}$). Standard linear attention reduces memory usage but still suffers from significant accuracy degradation (Loss: $1.93 \times 10^{-1}$), as it struggles to capture the complex global dependencies inherent in fluid dynamics. DynFormer with KS attention achieves the lowest test loss ($5.60 \times 10^{-2}$) at a moderate 21.9 GB memory footprint, proving that axis-wise factorization successfully preserves global coupling while solving the quadratic scalability bottleneck.
+\begin{table}[htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.2}
+  \caption{\textbf{Ablation Experiment 1 (E1): Attention Mechanisms.} Detailed comparison of variants on 2D Darcy and 2D NS. Memory (Mem) is reported in GB, and training time per epoch (Time) is in seconds. \textbf{Bold} indicates the best test loss.}
+  \label{tab:ablation_e1}
+  \begin{tabular}{l c c c c c c c c}
+    \toprule
+    & \multicolumn{4}{c}{\textbf{2D Darcy}} & \multicolumn{4}{c}{\textbf{2D NS}} \\
+    \cmidrule(lr){2-5} \cmidrule(lr){6-9}
+    \textbf{Variant} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} \\
+    \midrule
+    KS Attention & 13.1 & 3.0M & \textbf{1.68e-04} & 3.2 & 21.9 & 98.2K & \textbf{5.60e-02} & 16.9 \\
+    Classical Attention & 17.0 & 1.3K & 1.25e-01 & 2.4 & 57.5 & 49.0B & 4.07e-01 & 9.8 \\
+    Linear Attention & 8.7 & 857.2K & 3.25e-04 & 3.7 & 22.2 & 46.7K & 1.93e-01 & 29.0 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Impact of Spectral Embedding (E2)}
+We investigate the benefit of establishing the scale decomposition latent space in the spectral domain (Eq. \eqref{eq:spectral_embedding}) versus the physical domain (Table~\ref{tab:ablation_e2}). While physical embedding performs marginally better on the linear-dominated Darcy benchmark ($7.60 \times 10^{-5}$), the Spectral variant significantly outperforms on the highly nonlinear Navier-Stokes task ($5.60 \times 10^{-2}$ vs. $1.54 \times 10^{-1}$). This confirms our hypothesis from Section 2.1: spectral truncation explicitly isolates non-stiff low-frequency modes from small-scale noise, providing a far more robust latent state for global processing in chaotic systems.
+\begin{table}[htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.2}
+  \caption{\textbf{Ablation Experiment 2 (E2): Decomposition Strategy.} Detailed comparison of variants on 2D Darcy and 2D NS. Memory (Mem) is reported in GB, and training time per epoch (Time) is in seconds. \textbf{Bold} indicates the best test loss.}
+  \label{tab:ablation_e2}
+  \begin{tabular}{l c c c c c c c c}
+    \toprule
+    & \multicolumn{4}{c}{\textbf{2D Darcy}} & \multicolumn{4}{c}{\textbf{2D NS}} \\
+    \cmidrule(lr){2-5} \cmidrule(lr){6-9}
+    \textbf{Variant} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} \\
+    \midrule
+    Scale Decomp. w/ Spectral & 13.1 & 3.0M & 1.68e-04 & 3.2 & 21.9 & 98.2K & \textbf{5.60e-02} & 16.9 \\
+    Scale Decomp. w/ Physical & 10.7 & 3.1M & \textbf{7.60e-05} & 2.8 & 21.7 & 102.2K & 1.54e-01 & 15.4 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Impact of LGM Transformation (E3)}
+Table~\ref{tab:ablation_e3} validates our central claim from Section 2.3: recovering small-scale dynamics ($q_m$) requires nonlinear frequency mixing. A \textit{Global Only} baseline (NS Loss: $6.50 \times 10^{-2}$) indicates that large-scale features alone cannot resolve fine-scale physics. An additive residual connection (\textit{Adding}) yields minor improvements. However, the proposed multiplicative \textit{Mixing} strategy achieves the best performance (NS Loss: $5.60 \times 10^{-2}$). This empirically proves that multiplicative interactions successfully expand the spectral bandwidth via the Convolution Theorem, implicitly reconstructing the high-frequency residuals discarded during initial spectral truncation.
+\begin{table}[htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.2}
+  \caption{\textbf{Ablation Experiment 3 (E3): Connection Method.} Detailed comparison of variants on 2D Darcy and 2D NS. Memory (Mem) is reported in GB, and training time per epoch (Time) is in seconds. \textbf{Bold} indicates the best test loss. 'Global Only' represents the alone applied KS Attention without the mixing by a local transformation.}
+  \label{tab:ablation_e3}
+  \begin{tabular}{l c c c c c c c c}
+    \toprule
+    & \multicolumn{4}{c}{\textbf{2D Darcy}} & \multicolumn{4}{c}{\textbf{2D NS}} \\
+    \cmidrule(lr){2-5} \cmidrule(lr){6-9}
+    \textbf{Variant} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} \\
+    \midrule
+    Mixing & 13.1 & 3.0M & {\textbf{1.68e-04}} & 3.2 & 21.9 & 98.2K & {\textbf{5.60e-02}} & 16.9 \\
+    Adding & 14.1 & 3.8M & 1.81e-04 & 3.8 & 23.8 & 152.1K & 6.02e-02 & 18.0 \\
+    Global Only & 14.1 & 3.6M & 2.10e-04 & 3.7 & 23.8 & 145.6K & 6.50e-02 & 17.9 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Impact of Scale Decomposition (E4)}
+To assess the value of separating large and small scales (Eq. \eqref{eq:large_scale} and Eq. \eqref{eq:small_scale}), we evaluate architectures without explicit decomposition (Table~\ref{tab:ablation_e4}). Removing scale decomposition entirely (\textit{No Scale Decomp. w/ Global Only}) causes a catastrophic performance drop on Navier-Stokes (Loss increases to $3.11 \times 10^{-1}$). Even when mixing is applied without decomposition (\textit{No Scale Decomp. w/ Mixing}), performance degrades compared to the full model ($5.76 \times 10^{-2}$). This proves that forcing a single monolithic attention mechanism to process all scales simultaneously overwhelms the network; explicit decomposition is necessary to allow the model to specialize its processing for distinct physical regimes.
+\begin{table}[htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.2}
+  \caption{\textbf{Ablation Experiment 4 (E4): Mixing Strategies.} Detailed comparison of variants on 2D Darcy and 2D NS. Memory (Mem) is reported in GB, and training time per epoch (Time) is in seconds. \textbf{Bold} indicates the best test loss.}
+  \label{tab:ablation_e4}
+  \begin{tabular}{l c c c c c c c c}
+    \toprule
+    & \multicolumn{4}{c}{\textbf{2D Darcy}} & \multicolumn{4}{c}{\textbf{2D NS}} \\
+    \cmidrule(lr){2-5} \cmidrule(lr){6-9}
+    \textbf{Variant} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} \\
+    \midrule
+    Scale Decomp. w/ Mixing & 13.1 & 3.0M & 1.68e-04 & 3.2 & 21.9 & 98.2K & {\textbf{5.60e-02}} & 16.9 \\
+    No Scale Decomp. w/ Global Only & 13.8 & 3.6M & 2.17e-04 & 3.7 & 23.6 & 145.6K & 3.11e-01 & 18.6 \\
+    No Scale Decomp. w/ Mixing & 13.1 & 3.0M & {\textbf{1.31e-04}} & 3.2 & 22.2 & 98.2K & 5.76e-02 & 17.4 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Impact of Dynamics-Informed Architecture (E5)}
+Finally, we examine the evolutionary flow structure representing temporal discretization. Table~\ref{tab:ablation_e5} reveals that while a \textit{Sequential} variant (Eq. \eqref{eq:arch_evolution}) achieves the lowest loss on the steady-state Darcy Flow ($1.51 \times 10^{-4}$), the \textit{Hybrid} variant (Eq. \eqref{eq:arch_hybrid}) is vastly superior for the transient Navier-Stokes equations ($5.60 \times 10^{-2}$). The \textit{Hybrid} architecture acts as a learnable, adaptive Runge-Kutta method, decoupling update steps to provide the optimal balance between stability and expressiveness required for chaotic multiscale temporal dynamics.
+\begin{table}[htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \renewcommand{\arraystretch}{1.2}
+  \caption{\textbf{Ablation Experiment 5 (E5): Execution Flow.} Detailed comparison of variants on 2D Darcy and 2D NS. Memory (Mem) is reported in GB, and training time per epoch (Time) is in seconds. \textbf{Bold} indicates the best test loss.}
+  \label{tab:ablation_e5}
+  \begin{tabular}{l c c c c c c c c}
+    \toprule
+    & \multicolumn{4}{c}{\textbf{2D Darcy}} & \multicolumn{4}{c}{\textbf{2D NS}} \\
+    \cmidrule(lr){2-5} \cmidrule(lr){6-9}
+    \textbf{Variant} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} & \textbf{Mem} & \textbf{Params} & {\textbf{Loss}} & \textbf{Time} \\
+    \midrule
+    Hybrid & 13.1 & 3.0M & 1.68e-04 & 3.2 & 21.9 & 98.2K & {\textbf{5.60e-02}} & 16.9 \\
+    Parallel & 12.3 & 3.0M & 1.67e-04 & 3.1 & 20.1 & 98.2K & 7.89e-02 & 15.7 \\
+    Sequential & 14.0 & 3.8M & {\textbf{1.51e-04}} & 3.6 & 20.8 & 98.1K & 6.02e-02 & 14.4 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+
+\section{Conclusion}
+In this work, we introduced DynFormer, a novel dynamics-informed neural operator designed to overcome the quadratic scalability bottlenecks and multiscale representation limits of standard Transformer architectures in solving PDEs. Inspired by the hierarchical energy cascades inherent in complex physical systems, we theoretically established a framework that decomposes dynamics into large-scale linear behaviors and fine-scale nonlinear residuals. 
+
+To operationalize this theory, DynFormer leverages a spectral embedding strategy paired with a Kronecker-structured attention mechanism, successfully reducing the spatial complexity from $\mathcal{O}(N^4)$ to $\mathcal{O}(N^3)$ while preserving global receptive fields. Crucially, we introduced the LGM transformation, demonstrating both theoretically via the Convolution Theorem and empirically that multiplicative frequency mixing is essential for recovering sub-grid scale turbulent cascades that are typically lost to spectral truncation. Furthermore, by embedding these blocks within a hybrid evolutionary flow, DynFormer mimics adaptive temporal integration, ensuring stability over long-term autoregressive rollouts.
+
+Extensive evaluations under strictly memory-aligned constraints reveal that DynFormer establishes a new state-of-the-art across diverse physical regimes—spanning chaotic (Kuramoto-Sivashinsky), elliptic (Darcy Flow), parabolic (Navier-Stokes), and hyperbolic (Shallow Water) PDEs. It not only achieves up to a 95.1$\%$ reduction in relative error compared to existing baselines but also operates with nearly double the memory efficiency. 
+
+The architectural principles of DynFormer open several promising avenues for future research in scientific machine learning. By effectively decoupling spatial complexity from physical fidelity, DynFormer is uniquely positioned for scaling up to massive, high-resolution simulations, such as global weather forecasting and aerodynamic digital twins. Future work will explore extending the Kronecker-structured attention to handle three-dimensional PDEs, highly irregular meshes and complex geometric boundaries.
+
+
+\section*{Supplementary Materials}
+\textbf{Technical Appendices and Supplementary Material.} This document includes the following sections:
+\begin{itemize}
+  \item \textbf{Appendix A.1 Datasets} — Details the four diverse PDE benchmark datasets (1D Kuramoto-Sivashinsky, 2D Darcy Flow, 2D Navier-Stokes, and 3D Shallow Water), including their physical backgrounds, governing equations, generation protocols, and tensor shapes.
+  \item \textbf{Appendix A.2 Baselines} — Describes the theoretical foundations, architectures, hyperparameter settings, and comprehensive model statistics (parameters, memory consumption, and FLOPs) of five state-of-the-art neural operator baselines (ONO, Transolver, FactFormer, OFormer, GNOT) alongside our proposed DynFormer.
+  \item \textbf{Appendix A.3 Visualization of baselines across benchmarks} — Presents qualitative visual comparisons and spatial/temporal error analyses of all baseline models and DynFormer on representative test samples from each physical simulation benchmark, highlighting DynFormer's superior fidelity in capturing complex spatiotemporal dynamics.
+  \item \textbf{Appendix A.4 Limitations and Discussion} — Discusses the current architectural limitations of DynFormer, including its reliance on uniform grids due to parameterized Fourier transforms, performance trade-offs in purely linear/steady-state regimes, a comparative discussion with non-Transformer neural operators and possible constraints on separable space assumption.
+\end{itemize}
+
+\begin{sloppypar}
+  \textbf{Animations.} The supplementary animations provide qualitative, time-resolved comparisons between DynFormer predictions and the reference solutions on test samples. For each benchmark, we visualize the temporal evolution of the solution fields (or selected channels) over the rollout horizon.
+  \begin{itemize}
+    \item \textbf{Animation S1 (1D Kuramoto--Sivashinsky).} One-channel rollout example: \texttt{\path{1dKS_Animation_Batch_0_Channel_0.gif}}.
+    \item \textbf{Animation S2 (2D Navier--Stokes).} Single-channel example (e.g., vorticity): \texttt{\path{2dNS_Animation_Batch_0_Channel_0.gif}}.
+    \item \textbf{Animation S3 (3D Shallow Water).} Two-channel example (e.g., free-surface height and vorticity): \texttt{\path{3dSW_Animation_Batch_0_Channel_1.gif}}.
+  \end{itemize}
+\end{sloppypar}
+
+\section*{Acknowledgments}
+This work is supported by the Natural Science Foundation of China (No. 92270109). %The authors would like to thank Dr. Jing Wang (School of Aeronautics and Astronautics, Shanghai Jiao Tong University) for helpful discussions.
+
+\section*{Declarations}
+The authors declare no conflict of interest.
+
+\bibliographystyle{elsarticle-num}
+\bibliography{reference}% common bib file
+
+\end{document}

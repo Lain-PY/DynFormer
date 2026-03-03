@@ -1,0 +1,13 @@
+# Core dependencies for linear-attention-transformer
+torch>=1.7.0
+einops>=0.3.0
+
+# Package-specific dependencies
+linear-attention-transformer>=0.19.1
+local-attention>=1.4.0
+linformer>=0.2.0
+product-key-memory>=0.1.10
+axial-positional-embedding>=0.2.1
+performer-pytorch==1.1.4
+nystrom-attention==0.0.14
+reformer-pytorch==1.4.4
