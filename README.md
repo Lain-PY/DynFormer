@@ -1,12 +1,14 @@
-<p align="center">
-  <img src="assets/LogowName.png" alt="DynFormer Logo" width="250">
-</p>
+<div align="center">
+  <img src="assets/LogowName.png" alt="DynFormer Logo" width="500">
 
-# From Complex Dynamics to DynFormer: Rethinking Transformers for PDEs
+  <h1>From Complex Dynamics to DynFormer: Rethinking Transformers for PDEs</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.9+-ee4c2c.svg)](https://pytorch.org/)
+  <p>
+    <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+    <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
+    <a href="https://pytorch.org/"><img src="https://img.shields.io/badge/PyTorch-2.9+-ee4c2c.svg" alt="PyTorch"></a>
+  </p>
+</div>
 
 > **DynFormer** rethinks Transformers for PDEs through the lens of complex dynamics, assigning specialized modules to distinct physical scales — **Spectral Embedding** isolates low-frequency modes, **Kronecker-Structured Attention** captures global interactions at O(N³), and **LGM** reconstructs small-scale turbulent cascades via nonlinear frequency mixing.
 
