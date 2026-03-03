@@ -297,18 +297,18 @@ DynFormer achieves state-of-the-art performance across diverse PDE benchmarks:
 </p>
 <p align="center"><i>Benchmark results across all datasets. DynFormer consistently achieves the highest scores, demonstrating superior accuracy across 1D, 2D, and 3D PDE benchmarks.</i></p>
 
-## 📄 Citation
+<!-- ## 📄 Citation
 
 If you find this work useful, please cite:
 
 ```bibtex
-@article{lai2025dynformer,
+@article{lai2026dynformer,
   title={From Complex Dynamics to DynFormer: Rethinking Transformers for PDEs},
   author={Lai, Pengyu and Chen, Yixiao and Yang, Dewu and Wang, Rui and Wang, Feng and Xu, Hui},
   journal={arXiv preprint},
-  year={2025}
+  year={2026}
 }
-```
+``` -->
 
 ## 📜 License
 
