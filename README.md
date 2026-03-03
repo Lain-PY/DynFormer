@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/LogowName.png" alt="DynFormer Logo" width="800">
+  <img src="assets/LogowName.png" alt="DynFormer Logo" width="400">
 
   <h1>From Complex Dynamics to DynFormer: Rethinking Transformers for PDEs</h1>
 
