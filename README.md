@@ -199,15 +199,9 @@ DynFormer follows a simple but powerful philosophy: **the neural architecture sh
 1. **Lifting / Projection**: Pointwise MLPs mapping between physical fields and latent space
 2. **Spectral Dynamics Embedding**: 2D FFT → retain lowest M₁×M₂ modes → learnable complex spectral kernels → isolate large-scale latent state
 3. **Kronecker-Structured Attention**: Axis-wise factorized attention with RoPE, computing **K₁ · V · K₂ᵀ** at O(N³) instead of O(N⁴)
-4. **LGM Transformation**: Hadamard product of global (spectral + attention) × local (MLP) branches — multiplicative mixing reconstructs high-frequency residuals via the Convolution Theorem
+4. **LGM Transformation**: Hadamard product of global (spectral dynamics embedding + KS attention) × local (MLP) branches — multiplicative mixing reconstructs high-frequency residuals via the Convolution Theorem
 5. **Full-Scale Dynamics Layer (FSDL)**: Combines nonlinear LGM + linear LGM + Ψ_θ refinement MLP, analogous to operator splitting
 6. **Latent Evolution**: *L* stacked FSDLs with learnable Δt per layer, supporting three variants:
-
-| Variant | Formula | Best For |
-|---------|---------|----------|
-| **Hierarchical** | v_l = v_{l-1} + Δt_l · F_l(v_{l-1}) | Autoregressive time-stepping |
-| **Parallel** | v_L = v_0 + Δt · Σ_l F_l(v_0) | Steady-state (e.g., Darcy) |
-| **Hybrid** | v_L = v_0 + Σ_l Δt_l · F_l(v_{l-1}) | Chaotic dynamics (adaptive Runge-Kutta) |
 
 ## 📊 Supported Datasets
 
@@ -222,7 +216,7 @@ DynFormer follows a simple but powerful philosophy: **the neural architecture sh
 
 [![Hugging Face](https://img.shields.io/badge/🤗%20Hugging%20Face-Datasets-yellow)](https://huggingface.co/datasets/Lai-PY/DyMixOp-Benchmarks)
 
-All benchmark datasets are available on Hugging Face:
+All benchmark datasets are available on Hugging Face. Benchmark datasets are the same as the ones in DyMixOp:
 
 👉 **[DyMixOp-Benchmarks](https://huggingface.co/datasets/Lai-PY/DyMixOp-Benchmarks)**
 
