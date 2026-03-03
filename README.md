@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/Logo.png" alt="DynFormer Logo" width="250">
+</p>
+
 # From Complex Dynamics to DynFormer: Rethinking Transformers for PDEs
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
